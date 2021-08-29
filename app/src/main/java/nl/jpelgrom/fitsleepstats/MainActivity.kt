@@ -5,6 +5,10 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.OneTimeWorkRequest
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -47,6 +51,9 @@ class MainActivity : AppCompatActivity() {
         }
         binding.readButton.setOnClickListener {
             readData()
+        }
+        binding.workerButton.setOnClickListener {
+            scheduleWorker()
         }
 
         fitnessOptions.impliedScopes
@@ -105,7 +112,7 @@ class MainActivity : AppCompatActivity() {
             .includeSleepSessions()
             .read(DataType.TYPE_SLEEP_SEGMENT)
             .setTimeInterval(
-                LocalDateTime.now().minusDays(7).atZone(ZoneId.systemDefault()).toEpochSecond(),
+                LocalDateTime.now().minusDays(8).atZone(ZoneId.systemDefault()).toEpochSecond(),
                 LocalDateTime.now().atZone(ZoneId.systemDefault()).toEpochSecond(),
                 TimeUnit.SECONDS
             )
@@ -136,5 +143,17 @@ class MainActivity : AppCompatActivity() {
             .addOnFailureListener { response ->
                 response.printStackTrace()
             }
+    }
+
+    private fun scheduleWorker() {
+        val summaryWorkerRequest = PeriodicWorkRequestBuilder<NotificationWorker>(2, TimeUnit.HOURS)
+            .build()
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "summary",
+            ExistingPeriodicWorkPolicy.KEEP, summaryWorkerRequest
+        )
+
+        WorkManager.getInstance(this)
+            .enqueue(OneTimeWorkRequest.from(NotificationWorker::class.java))
     }
 }
