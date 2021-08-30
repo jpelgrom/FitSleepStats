@@ -13,7 +13,10 @@ import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.fitness.Fitness
 import com.google.android.gms.fitness.FitnessOptions
 import com.google.android.gms.fitness.HistoryApi
+import com.google.android.gms.fitness.data.DataSet
 import com.google.android.gms.fitness.data.DataType
+import com.google.android.gms.fitness.data.Field
+import com.google.android.gms.fitness.data.Session
 import com.google.android.gms.fitness.request.SessionReadRequest
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -23,6 +26,15 @@ import kotlin.streams.toList
 
 class NotificationWorker(appContext: Context, workerParams: WorkerParameters) :
     Worker(appContext, workerParams) {
+    private val SLEEP_STAGE_NAMES = arrayOf(
+        "Unused",
+        "Awake (during sleep)",
+        "Sleep",
+        "Out-of-bed",
+        "Light sleep",
+        "Deep sleep",
+        "REM sleep"
+    )
     private val fitnessOptions = FitnessOptions.builder()
         .addDataType(DataType.TYPE_SLEEP_SEGMENT, FitnessOptions.ACCESS_READ)
         .build()
@@ -73,11 +85,9 @@ class NotificationWorker(appContext: Context, workerParams: WorkerParameters) :
                 val latestSession = sessions[0]
                 if (latestSession.identifier != sharedPref.getString("latestSession", "")) {
                     val sleepDuration =
-                        latestSession.getEndTime(TimeUnit.SECONDS) - latestSession.getStartTime(
-                            TimeUnit.SECONDS
-                        )
+                        getSleepDuration(latestSession, response.getDataSet(latestSession))
                     val averageSleepDuration = sessions.stream()
-                        .mapToLong { it.getEndTime(TimeUnit.SECONDS) - it.getStartTime(TimeUnit.SECONDS) }
+                        .mapToLong { getSleepDuration(it, response.getDataSet(it)) }
                         .average().asDouble
 
                     val sleepDurationHours = floor(sleepDuration / 60 / 60.0)
@@ -131,6 +141,31 @@ class NotificationWorker(appContext: Context, workerParams: WorkerParameters) :
             e.printStackTrace()
         }
         return Result.success()
+    }
+
+    private fun getSleepDuration(session: Session, dataSets: List<DataSet>): Long {
+        // Simple, backup value
+        var duration = session.getEndTime(TimeUnit.SECONDS) - session.getStartTime(TimeUnit.SECONDS)
+
+        // Check for detailed information
+        if (dataSets.isNotEmpty()) {
+            duration = 0
+
+            for (dataSet in dataSets) {
+                for (point in dataSet.dataPoints) {
+                    val sleepStageVal =
+                        point.getValue(Field.FIELD_SLEEP_SEGMENT_TYPE).asInt()
+                    val sleepStage = SLEEP_STAGE_NAMES[sleepStageVal]
+                    if (sleepStage != SLEEP_STAGE_NAMES[0] && sleepStage != SLEEP_STAGE_NAMES[1] && sleepStage != SLEEP_STAGE_NAMES[3]) { // it's some form of sleeping
+                        duration += (point.getEndTime(TimeUnit.SECONDS) - point.getStartTime(
+                            TimeUnit.SECONDS
+                        ))
+                    }
+                }
+            }
+        }
+
+        return duration
     }
 
     private fun createNotificationChannel() {
