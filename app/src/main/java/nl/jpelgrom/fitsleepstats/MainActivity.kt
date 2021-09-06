@@ -10,6 +10,7 @@ import androidx.work.OneTimeWorkRequest
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
@@ -56,19 +57,20 @@ class MainActivity : AppCompatActivity() {
             scheduleWorker()
         }
 
-        fitnessOptions.impliedScopes
-        val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .build()
+        val options = GoogleSignInOptions.Builder().requestScopes(
+            fitnessOptions.impliedScopes[0],
+            *fitnessOptions.impliedScopes.drop(1).toTypedArray()
+        ).build()
         googleSignInClient = GoogleSignIn.getClient(this, options)
     }
 
     override fun onStart() {
         super.onStart()
-        val existingGoogleAcount = GoogleSignIn.getLastSignedInAccount(this)
-        if (existingGoogleAcount != null
-            && GoogleSignIn.hasPermissions(existingGoogleAcount, fitnessOptions)
+        val existingGoogleAccount = GoogleSignIn.getLastSignedInAccount(this)
+        if (existingGoogleAccount != null
+            && GoogleSignIn.hasPermissions(existingGoogleAccount, fitnessOptions)
         ) {
-            binding.signinButton.text = "Signed in ✔"
+            binding.signinButton.text = "Signed in (0) ✔"
         }
     }
 
@@ -76,13 +78,17 @@ class MainActivity : AppCompatActivity() {
         startActivityForResult(googleSignInClient.signInIntent, 1)
     }
 
-    private fun getAccessToGoogleFit() {
-        GoogleSignIn.requestPermissions(
-            this,
-            2,
-            GoogleSignIn.getLastSignedInAccount(this),
-            fitnessOptions
-        )
+    private fun getAccessToGoogleFit(account: GoogleSignInAccount) {
+        if (!GoogleSignIn.hasPermissions(account, fitnessOptions)) {
+            GoogleSignIn.requestPermissions(
+                this,
+                2,
+                account,
+                fitnessOptions
+            )
+        } else {
+            binding.signinButton.text = "Signed in (1) ✔"
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -91,15 +97,15 @@ class MainActivity : AppCompatActivity() {
         if (requestCode == 1) {
             val signinTask = GoogleSignIn.getSignedInAccountFromIntent(data)
             try {
-                signinTask.getResult(Exception::class.java)
-                getAccessToGoogleFit()
+                val account = signinTask.getResult(Exception::class.java)
+                getAccessToGoogleFit(account)
             } catch (e: ApiException) {
                 Log.w(TAG, "signInResult:failed code=" + e.statusCode);
                 binding.signinButton.text = "Failed sign in ❌"
             }
         } else if (requestCode == 2) {
             if (resultCode == Activity.RESULT_OK) {
-                binding.signinButton.text = "Signed in ✔"
+                binding.signinButton.text = "Signed in (2) ✔"
             } else {
                 binding.signinButton.text = "Failed sign in ❌"
             }
