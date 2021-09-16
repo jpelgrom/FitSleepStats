@@ -94,8 +94,11 @@ class NotificationWorker(appContext: Context, workerParams: WorkerParameters) :
                     val sleepDurationMinutes = floor((sleepDuration / 60.0) % 60)
                     val averageSleepDurationHours = floor(averageSleepDuration / 60 / 60)
                     val averageSleepDurationMinutes = floor((averageSleepDuration / 60) % 60)
-                    val averageSleepComparisonEmoji =
-                        if (sleepDuration.toDouble() > averageSleepDuration) "📈" else "📉"
+                    val averageSleepComparisonEmoji = when {
+                        sleepDuration.toDouble() > (averageSleepDuration + 600) -> "↗️"
+                        sleepDuration.toDouble() < (averageSleepDuration - 600) -> "↘️"
+                        else -> "➡️"
+                    }
 
                     val latestSessionSource =
                         response.getDataSet(latestSession)[0].dataPoints[0].originalDataSource
